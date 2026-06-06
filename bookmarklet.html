@@ -170,42 +170,48 @@ function citatorBookmarklet() {
     return p.length < 2 ? a : `${p.at(-1)}, ${p.slice(0,-1).join(' ')}`;
   }
 
+  function shortTitle(title, words = 4) {
+    if (!title) return null;
+    const w = title.split(/\s+/);
+    return w.length > words ? w.slice(0, words).join(' ') + '…' : title;
+  }
+
   function buildAPA(title, author, site, date, url) {
     const parts = [];
     const a = toAPA(author);
-    if (a) parts.push(a);
+    if (a)          parts.push(a);
+    else if (title) parts.push(title);           // title substitutes for missing author
     parts.push(date ? `(${date.getFullYear()}, ${MONTHS[date.getMonth()]} ${date.getDate()})` : '(n.d.)');
-    if (title) parts.push(title);
-    if (site)  parts.push(site);
+    if (a && title) parts.push(title);           // only add title again if author was present
+    if (site)       parts.push(site);
     return parts.join('. ').replace(/\.+$/, '') + '. ' + url;
   }
 
-  function buildAPAInText(author, date) {
-    const last = author ? author.trim().split(/\s+/).at(-1) : null;
-    const year = date ? date.getFullYear() : 'n.d.';
-    return last ? `(${last}, ${year})` : `(${year})`;
+  function buildAPAInText(author, date, title) {
+    const year  = date ? date.getFullYear() : 'n.d.';
+    const last  = author ? author.trim().split(/\s+/).at(-1) : null;
+    if (last)   return `(${last}, ${year})`;
+    if (title)  return `("${shortTitle(title)}", ${year})`;
+    return `(${year})`;
   }
 
   function buildMLA(title, author, site, date, url) {
     const now = new Date();
     let c = '';
     const a = toMLA(author);
-    if (a)     c += `${a}. `;
-    if (title) c += `"${title}." `;
-    if (site)  c += `${site}, `;
-    if (date)  c += `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}, `;
+    if (a)          c += `${a}. `;
+    else if (title) c += `"${title}." `;         // title substitutes for missing author
+    if (a && title) c += `"${title}." `;         // only add title again if author was present
+    if (site)       c += `${site}, `;
+    if (date)       c += `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}, `;
     c += `${url}. Accessed ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}.`;
     return c;
   }
 
   function buildMLAInText(author, title) {
     const last = author ? author.trim().split(/\s+/).at(-1) : null;
-    if (last) return `(${last})`;
-    // No author — MLA uses a shortened title in quotes
-    if (title) {
-      const short = title.split(/\s+/).slice(0, 4).join(' ');
-      return `("${short}${title.split(/\s+/).length > 4 ? '...' : ''}")`;
-    }
+    if (last)   return `(${last})`;
+    if (title)  return `("${shortTitle(title)}")`;
     return '';
   }
 
@@ -285,7 +291,7 @@ function citatorBookmarklet() {
       ? buildAPA(title, author, site, date, url)
       : buildMLA(title, author, site, date, url);
     intextBox.textContent = fmt === 'APA7'
-      ? buildAPAInText(author, date)
+      ? buildAPAInText(author, date, title)
       : buildMLAInText(author, title);
     labels.forEach(l => {
       const active = l.querySelector('input').checked;
