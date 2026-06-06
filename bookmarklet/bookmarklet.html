@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Citator — Bookmarklet Installer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #f5f5f5;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,.08);
+      padding: 2rem;
+      width: 100%;
+      max-width: 560px;
+    }
+
+    h1 { font-size: 1.4rem; font-weight: 700; color: #111; margin-bottom: .4rem; }
+    .subtitle { font-size: .9rem; color: #666; margin-bottom: 2rem; }
+
+    .step {
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1.5rem;
+      align-items: flex-start;
+    }
+    .step-num {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: #4f6ef7;
+      color: #fff;
+      font-size: .85rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .step-body { flex: 1; }
+    .step-body p { font-size: .92rem; color: #333; line-height: 1.5; }
+    .step-body p + p { margin-top: .35rem; }
+    kbd {
+      display: inline-block;
+      padding: .1rem .35rem;
+      background: #f0f0f0;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      font-family: monospace;
+      font-size: .82rem;
+    }
+
+    .bookmark-link {
+      display: inline-block;
+      margin-top: .75rem;
+      padding: .55rem 1.1rem;
+      background: #4f6ef7;
+      color: #fff;
+      border-radius: 8px;
+      font-size: .95rem;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: grab;
+      user-select: none;
+      transition: background .15s;
+    }
+    .bookmark-link:hover { background: #3a58e0; }
+    .drag-hint {
+      font-size: .78rem;
+      color: #888;
+      margin-top: .5rem;
+    }
+
+    hr { border: none; border-top: 1px solid #eee; margin: 1.75rem 0; }
+
+    .use-title { font-size: 1rem; font-weight: 700; color: #111; margin-bottom: 1rem; }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>Citator</h1>
+  <p class="subtitle">One-click APA 7 &amp; MLA citations — no installs, works on any Chromebook.</p>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <p>Show the bookmarks bar if it's hidden:</p>
+      <p><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <p>Drag the button below onto your bookmarks bar — or right-click it and choose <strong>Bookmark link</strong>.</p>
+      <a class="bookmark-link" id="bookmarklet" href="#">📎 Cite this page</a>
+      <p class="drag-hint">Drag me to your bookmarks bar ↑</p>
+    </div>
+  </div>
+
+  <hr>
+
+  <p class="use-title">How to use</p>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body"><p>Navigate to any webpage you want to cite.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body"><p>Click <strong>📎 Cite this page</strong> in your bookmarks bar.</p></div>
+  </div>
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body"><p>Choose APA 7 or MLA, then copy your citation.</p></div>
+  </div>
+</div>
+
+<script>
+// ── Bookmarklet source (runs on the target page) ─────────────────────────────
+function citatorBookmarklet() {
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  function getMeta(...names) {
+    for (const name of names) {
+      for (const attr of ['name', 'property']) {
+        const el = document.querySelector(`meta[${attr}="${name}"]`) ||
+                   document.querySelector(`meta[${attr}="og:${name}"]`);
+        if (el) { const v = el.getAttribute('content'); if (v) return v.trim(); }
+      }
+    }
+    return null;
+  }
+
+  function decode(s) {
+    if (!s) return s;
+    const t = document.createElement('textarea');
+    t.innerHTML = s;
+    return t.value;
+  }
+
+  function parseDate(raw) {
+    if (!raw) return null;
+    const d = new Date(raw);
+    return isNaN(d) ? null : d;
+  }
+
+  const MONTHS = ['January','February','March','April','May','June',
+                  'July','August','September','October','November','December'];
+
+  function toAPA(a) {
+    if (!a) return null;
+    const p = a.trim().split(/\s+/);
+    return p.length < 2 ? a : `${p.at(-1)}, ${p.slice(0,-1).map(x=>x[0]+'.').join(' ')}`;
+  }
+
+  function toMLA(a) {
+    if (!a) return null;
+    const p = a.trim().split(/\s+/);
+    return p.length < 2 ? a : `${p.at(-1)}, ${p.slice(0,-1).join(' ')}`;
+  }
+
+  function buildAPA(title, author, site, date, url) {
+    const parts = [];
+    const a = toAPA(author);
+    if (a) parts.push(a);
+    parts.push(date ? `(${date.getFullYear()}, ${MONTHS[date.getMonth()]} ${date.getDate()})` : '(n.d.)');
+    if (title) parts.push(title);
+    if (site)  parts.push(site);
+    return parts.join('. ').replace(/\.+$/, '') + '. ' + url;
+  }
+
+  function buildMLA(title, author, site, date, url) {
+    const now = new Date();
+    let c = '';
+    const a = toMLA(author);
+    if (a)     c += `${a}. `;
+    if (title) c += `"${title}." `;
+    if (site)  c += `${site}, `;
+    if (date)  c += `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}, `;
+    c += `${url}. Accessed ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}.`;
+    return c;
+  }
+
+  // ── Gather metadata ───────────────────────────────────────────────────────
+  const title  = decode(getMeta('title') || document.title || null);
+  const author = decode(getMeta('author'));
+  const site   = decode(getMeta('site_name') || getMeta('application-name'));
+  const date   = parseDate(getMeta('article:published_time','published_time','date','DC.date'));
+  const url    = window.location.href;
+
+  // ── Build overlay UI ──────────────────────────────────────────────────────
+  const existing = document.getElementById('__citator__');
+  if (existing) { existing.remove(); return; }
+
+  const overlay = document.createElement('div');
+  overlay.id = '__citator__';
+  overlay.style.cssText = `
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,.45);z-index:2147483647;
+    display:flex;align-items:center;justify-content:center;
+    font-family:system-ui,-apple-system,sans-serif;
+  `;
+
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:1.75rem;width:min(560px,92vw);
+                box-shadow:0 8px 40px rgba(0,0,0,.25);position:relative;">
+      <button id="__cit_close__" style="position:absolute;top:.75rem;right:.9rem;
+              background:none;border:none;font-size:1.3rem;cursor:pointer;color:#888;
+              line-height:1;">✕</button>
+      <div style="font-weight:700;font-size:1.1rem;margin-bottom:1.1rem;color:#111;">
+        📎 Cite this page
+      </div>
+      <div style="display:flex;gap:.6rem;margin-bottom:1rem;">
+        <label style="flex:1;display:flex;align-items:center;justify-content:center;
+               gap:.4rem;padding:.5rem;border:1.5px solid #4f6ef7;border-radius:8px;
+               background:#eef1ff;cursor:pointer;font-weight:600;color:#2d45d4;">
+          <input type="radio" name="__cit_fmt__" value="APA7" checked style="display:none;"> APA 7
+        </label>
+        <label style="flex:1;display:flex;align-items:center;justify-content:center;
+               gap:.4rem;padding:.5rem;border:1.5px solid #ddd;border-radius:8px;
+               cursor:pointer;color:#444;" id="__cit_mla_lbl__">
+          <input type="radio" name="__cit_fmt__" value="MLA" style="display:none;"> MLA
+        </label>
+      </div>
+      <div id="__cit_box__" style="background:#f8f8f8;border:1.5px solid #e8e8e8;
+           border-radius:8px;padding:.85rem 1rem;font-size:.9rem;line-height:1.6;
+           color:#222;white-space:pre-wrap;word-break:break-word;min-height:3.5rem;"></div>
+      <button id="__cit_copy__" style="margin-top:.75rem;padding:.45rem .9rem;
+              background:transparent;border:1.5px solid #ddd;border-radius:6px;
+              font-size:.85rem;cursor:pointer;color:#444;">Copy</button>
+    </div>
+  `;
+
+  document.body.appendChild(overlay);
+
+  function render(fmt) {
+    return fmt === 'APA7'
+      ? buildAPA(title, author, site, date, url)
+      : buildMLA(title, author, site, date, url);
+  }
+
+  const box    = overlay.querySelector('#__cit_box__');
+  const copyBtn= overlay.querySelector('#__cit_copy__');
+  const radios = overlay.querySelectorAll('input[name="__cit_fmt__"]');
+  const labels = overlay.querySelectorAll('label');
+
+  function update() {
+    const fmt = [...radios].find(r=>r.checked).value;
+    box.textContent = render(fmt);
+    labels.forEach(l => {
+      const active = l.querySelector('input').checked;
+      l.style.borderColor  = active ? '#4f6ef7' : '#ddd';
+      l.style.background   = active ? '#eef1ff' : '';
+      l.style.color        = active ? '#2d45d4' : '#444';
+      l.style.fontWeight   = active ? '600' : '400';
+    });
+  }
+
+  update();
+
+  radios.forEach(r => r.addEventListener('change', update));
+
+  overlay.querySelector('#__cit_close__').addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(box.textContent).then(() => {
+      copyBtn.textContent = 'Copied!';
+      copyBtn.style.borderColor = '#22c55e';
+      copyBtn.style.color = '#22c55e';
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy';
+        copyBtn.style.borderColor = '#ddd';
+        copyBtn.style.color = '#444';
+      }, 2000);
+    });
+  });
+}
+
+// ── Build the bookmarklet href ────────────────────────────────────────────────
+const src = `(${citatorBookmarklet.toString()})()`;
+document.getElementById('bookmarklet').href = 'javascript:' + encodeURIComponent(src);
+</script>
+</body>
+</html>
