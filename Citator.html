@@ -275,10 +275,21 @@
 
     // ── Fetch via CORS proxy ─────────────────────────────────────────────────
     async function fetchHTML(url) {
-      const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-      const res   = await fetch(proxy);
-      if (!res.ok) throw new Error(`Proxy error: ${res.status}`);
-      const json  = await res.json();
+      let res;
+      try {
+        res = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+      } catch {
+        throw new Error('Network error — check your internet connection.');
+      }
+      if (res.status === 404) throw new Error('Page not found (404). Check the URL.');
+      if (res.status === 403) throw new Error('Access denied (403) — the site blocked the request.');
+      if (res.status === 429) throw new Error('Too many requests (429) — wait a moment and try again.');
+      if (!res.ok)            throw new Error(`Proxy returned an error (${res.status}). Try again later.`);
+      let json;
+      try { json = await res.json(); } catch {
+        throw new Error('Unexpected response from proxy. Try again later.');
+      }
+      if (!json.contents) throw new Error('The page returned no content. It may require a login or block automated access.');
       return json.contents;
     }
 
@@ -323,7 +334,7 @@
         copyBtn.className      = 'copy-btn';
 
       } catch (err) {
-        errorEl.textContent  = 'Could not fetch the page. Check the URL and try again.';
+        errorEl.textContent  = err.message || 'Could not fetch the page. Check the URL and try again.';
         errorEl.className    = 'error visible';
       } finally {
         submitBtn.disabled   = false;
