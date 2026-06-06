@@ -123,7 +123,7 @@
   </div>
   <div class="step">
     <div class="step-num">3</div>
-    <div class="step-body"><p>Choose APA 7 or MLA, then copy your citation.</p></div>
+    <div class="step-body"><p>Choose APA 7 or MLA. Copy the <strong>full reference</strong> for your bibliography or the <strong>in-text citation</strong> to drop inline.</p></div>
   </div>
 </div>
 
@@ -180,6 +180,12 @@ function citatorBookmarklet() {
     return parts.join('. ').replace(/\.+$/, '') + '. ' + url;
   }
 
+  function buildAPAInText(author, date) {
+    const last = author ? author.trim().split(/\s+/).at(-1) : null;
+    const year = date ? date.getFullYear() : 'n.d.';
+    return last ? `(${last}, ${year})` : `(${year})`;
+  }
+
   function buildMLA(title, author, site, date, url) {
     const now = new Date();
     let c = '';
@@ -190,6 +196,17 @@ function citatorBookmarklet() {
     if (date)  c += `${date.getDate()} ${MONTHS[date.getMonth()]} ${date.getFullYear()}, `;
     c += `${url}. Accessed ${now.getDate()} ${MONTHS[now.getMonth()]} ${now.getFullYear()}.`;
     return c;
+  }
+
+  function buildMLAInText(author, title) {
+    const last = author ? author.trim().split(/\s+/).at(-1) : null;
+    if (last) return `(${last})`;
+    // No author — MLA uses a shortened title in quotes
+    if (title) {
+      const short = title.split(/\s+/).slice(0, 4).join(' ');
+      return `("${short}${title.split(/\s+/).length > 4 ? '...' : ''}")`;
+    }
+    return '';
   }
 
   // ── Gather metadata ───────────────────────────────────────────────────────
@@ -233,59 +250,75 @@ function citatorBookmarklet() {
           <input type="radio" name="__cit_fmt__" value="MLA" style="display:none;"> MLA
         </label>
       </div>
+      <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;
+           letter-spacing:.05em;color:#888;margin-bottom:.35rem;">Full reference</div>
       <div id="__cit_box__" style="background:#f8f8f8;border:1.5px solid #e8e8e8;
            border-radius:8px;padding:.85rem 1rem;font-size:.9rem;line-height:1.6;
            color:#222;white-space:pre-wrap;word-break:break-word;min-height:3.5rem;"></div>
-      <button id="__cit_copy__" style="margin-top:.75rem;padding:.45rem .9rem;
+      <button id="__cit_copy__" style="margin-top:.5rem;padding:.4rem .85rem;
               background:transparent;border:1.5px solid #ddd;border-radius:6px;
-              font-size:.85rem;cursor:pointer;color:#444;">Copy</button>
+              font-size:.82rem;cursor:pointer;color:#444;">Copy</button>
+
+      <div style="font-size:.75rem;font-weight:600;text-transform:uppercase;
+           letter-spacing:.05em;color:#888;margin:1rem 0 .35rem;">In-text citation</div>
+      <div id="__cit_intext__" style="background:#f8f8f8;border:1.5px solid #e8e8e8;
+           border-radius:8px;padding:.7rem 1rem;font-size:.9rem;line-height:1.6;
+           color:#222;word-break:break-word;"></div>
+      <button id="__cit_copy_intext__" style="margin-top:.5rem;padding:.4rem .85rem;
+              background:transparent;border:1.5px solid #ddd;border-radius:6px;
+              font-size:.82rem;cursor:pointer;color:#444;">Copy</button>
     </div>
   `;
 
   document.body.appendChild(overlay);
 
-  function render(fmt) {
-    return fmt === 'APA7'
-      ? buildAPA(title, author, site, date, url)
-      : buildMLA(title, author, site, date, url);
-  }
-
-  const box    = overlay.querySelector('#__cit_box__');
-  const copyBtn= overlay.querySelector('#__cit_copy__');
-  const radios = overlay.querySelectorAll('input[name="__cit_fmt__"]');
-  const labels = overlay.querySelectorAll('label');
+  const box          = overlay.querySelector('#__cit_box__');
+  const intextBox    = overlay.querySelector('#__cit_intext__');
+  const copyBtn      = overlay.querySelector('#__cit_copy__');
+  const copyIntext   = overlay.querySelector('#__cit_copy_intext__');
+  const radios       = overlay.querySelectorAll('input[name="__cit_fmt__"]');
+  const labels       = overlay.querySelectorAll('label');
 
   function update() {
     const fmt = [...radios].find(r=>r.checked).value;
-    box.textContent = render(fmt);
+    box.textContent = fmt === 'APA7'
+      ? buildAPA(title, author, site, date, url)
+      : buildMLA(title, author, site, date, url);
+    intextBox.textContent = fmt === 'APA7'
+      ? buildAPAInText(author, date)
+      : buildMLAInText(author, title);
     labels.forEach(l => {
       const active = l.querySelector('input').checked;
-      l.style.borderColor  = active ? '#4f6ef7' : '#ddd';
-      l.style.background   = active ? '#eef1ff' : '';
-      l.style.color        = active ? '#2d45d4' : '#444';
-      l.style.fontWeight   = active ? '600' : '400';
+      l.style.borderColor = active ? '#4f6ef7' : '#ddd';
+      l.style.background  = active ? '#eef1ff' : '';
+      l.style.color       = active ? '#2d45d4' : '#444';
+      l.style.fontWeight  = active ? '600' : '400';
     });
   }
 
   update();
-
   radios.forEach(r => r.addEventListener('change', update));
 
   overlay.querySelector('#__cit_close__').addEventListener('click', () => overlay.remove());
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(box.textContent).then(() => {
-      copyBtn.textContent = 'Copied!';
-      copyBtn.style.borderColor = '#22c55e';
-      copyBtn.style.color = '#22c55e';
-      setTimeout(() => {
-        copyBtn.textContent = 'Copy';
-        copyBtn.style.borderColor = '#ddd';
-        copyBtn.style.color = '#444';
-      }, 2000);
+  function makeCopyHandler(btn, getText) {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(getText()).then(() => {
+        btn.textContent = 'Copied!';
+        btn.style.borderColor = '#22c55e';
+        btn.style.color = '#22c55e';
+        setTimeout(() => {
+          btn.textContent = 'Copy';
+          btn.style.borderColor = '#ddd';
+          btn.style.color = '#444';
+        }, 2000);
+      });
     });
-  });
+  }
+
+  makeCopyHandler(copyBtn,    () => box.textContent);
+  makeCopyHandler(copyIntext, () => intextBox.textContent);
 }
 
 // ── Build the bookmarklet href ────────────────────────────────────────────────
