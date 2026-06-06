@@ -1,5 +1,5 @@
 # Citator
-
+bookmarklet is the current version
 Generate APA 7 or MLA citations from a URL. Three versions for different environments:
 
 | Folder | Best for |
